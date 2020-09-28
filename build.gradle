@@ -1,0 +1,187 @@
+buildscript {
+    ext['gradleDockerVersion'] = '1.2'
+    ext['junitVersion'] = '4.10'
+    ext['junitJupiterVersion'] = '5.3.1'
+    ext['guavaVersion'] = '28.1-jre'
+    ext['commonsLangVersion'] = '3.4'
+    ext['lombokVersion'] = '1.18.12'
+    ext['slf4jVersion'] = '1.7.12'
+    ext['logbackVersion'] = '1.1.7'
+    ext['spotbugsVersion'] = '2.0.0'
+    ext['vavrVersion'] = '0.9.0'
+    ext['threadweaverVersion'] = '0.2'
+    ext['tempusFugitVersion'] = '1.1'
+    ext['cglibVersion'] = '2.2.2'
+    ext['mockitoVersion'] = '2.+'
+
+    repositories {
+        mavenLocal()
+        jcenter()
+        mavenCentral()
+        maven { url 'http://dl.bintray.com/jetbrains/intellij-plugin-service' }
+        maven {
+            url "https://plugins.gradle.org/m2/"
+        }
+    }
+
+    dependencies {
+        classpath("se.transmode.gradle:gradle-docker:${gradleDockerVersion}")
+        classpath ("gradle.plugin.com.github.spotbugs:spotbugs-gradle-plugin:${spotbugsVersion}")
+        classpath group: 'com.google.guava', name: 'guava', version: '28.1-jre' // workaround for failing spotbugs
+    }
+
+}
+
+
+group = 'nmf'
+
+apply plugin: 'application'
+apply plugin: 'java'
+apply plugin: 'groovy'
+apply plugin: 'eclipse'
+apply plugin: 'idea'
+apply plugin: 'checkstyle'
+apply plugin: 'com.github.spotbugs'
+apply plugin: 'pmd'
+apply plugin: 'docker'
+
+jar {
+    group = 'nmf-assessment'
+    baseName = 'nmf-pricer'
+    version = '1.0'
+    manifest {
+        attributes 'Main-Class': 'com.nmf.assessment.q1.solution.Main'
+    }
+
+    from {
+        configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+mainClassName = 'com.nmf.assessment.q1.solution.Main'
+
+repositories {
+    mavenCentral()
+}
+
+
+
+dependencies {
+
+    // guava
+    compile "com.google.guava:guava:${guavaVersion}"
+
+    // vavr
+    compile "io.vavr:vavr:${vavrVersion}"
+
+    // logging
+    compile "org.slf4j:slf4j-api:${slf4jVersion}"
+    compile "ch.qos.logback:logback-classic:${logbackVersion}"
+
+    // apache commons lang
+    compile "org.apache.commons:commons-lang3:${commonsLangVersion}"
+
+    // lombok
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+
+    // unit testing
+    compile "org.slf4j:jcl-over-slf4j:${slf4jVersion}"
+    testImplementation "org.junit.jupiter:junit-jupiter-api:${junitJupiterVersion}"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${junitJupiterVersion}"
+    testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
+    testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+
+    testCompile "com.googlecode.thread-weaver:threadweaver:${threadweaverVersion}"
+    testCompile "com.google.code.tempus-fugit:tempus-fugit:${tempusFugitVersion}"
+    testCompile "cglib:cglib-nodep:${cglibVersion}"
+    testCompile "org.mockito:mockito-core:${mockitoVersion}"
+}
+
+//task wrapper(type: Wrapper) {
+//    gradleVersion = '5.1'
+//}
+
+checkstyle {
+    toolVersion = '8.12'
+    ignoreFailures = false
+    configFile = file("src/main/resources/checkstyle.xml")
+}
+
+spotbugs {
+    toolVersion = '3.1.12'//'3.1.3'
+    ignoreFailures = true
+    effort = 'max'
+    showProgress = true
+}
+
+pmd {
+    toolVersion = '6.7.0'
+    ignoreFailures = false
+    ruleSetFiles = files("src/main/resources/ruleset.xml")
+    ruleSets = []
+    rulePriority = 3
+}
+
+tasks.withType(Checkstyle) {
+    reports {
+        xml.enabled false
+        html.enabled true
+    }
+}
+
+tasks.withType(Pmd) {
+    reports {
+        xml.enabled false
+        html.enabled true
+    }
+}
+
+
+//
+//spotbugs {
+//    toolVersion = '3.1.3'
+//    ignoreFailures = false
+//
+//    effort = "min"
+//    // This selects what level of bugs to report: low means low priority issues will be reported
+//    // (in addition to medium+high), which corresponds to warning about everything.
+//    // TODO: boost this to low once low priority issues are fixed.
+//    reportLevel = "medium"
+//
+//    excludeFilter = new File("$project.rootDir/config/quality/spotbugs/android-exclude-filter.xml")
+//}
+//
+//task spotbugs(type: com.github.spotbugs.SpotBugsTask, dependsOn: 'assemble', group: 'verification') {
+//    classes = files("$projectDir.absolutePath/build/intermediates/app_classes/debug")
+//
+//    source = fileTree('src/main/java')
+//
+//
+//    // Only one report format is supported. Html is easier to read, so let's use that
+//    // (xml is the one that's enabled by default).
+//    reports {
+//        xml.enabled = false
+//        html.enabled = true
+//    }
+//
+//    classpath = files()
+//}
+
+task buildDocker(type: Docker, dependsOn: build) {
+    push = false
+    applicationName = jar.baseName
+    dockerfile = file('src/main/docker/Dockerfile')
+    def waitForScript = file('src/main/docker/wait-for-it.sh')
+    doFirst {
+        copy {
+            from jar
+            into stageDir
+        }
+        copy {
+            from waitForScript
+            into stageDir
+        }
+    }
+}
+
