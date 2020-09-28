@@ -13,6 +13,10 @@ the runnable fat jar:
 ./gradlew clean build
 ```
 
+| Note that this application has been implemented with a JDK 12. In case of any compilation or runtime issue make sure to use a compatible local environment. |
+| --- |
+
+
 Then, to run the application, simply type:
 
 ```
